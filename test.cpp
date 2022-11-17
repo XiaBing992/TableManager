@@ -87,13 +87,13 @@ void Test::bPlusTreeUpdateTestByRand(BPlusTree* bPlusTree,int n)
 void Test::testBPlusTree()
 {
     logger.writeLog("testBPlusTree...",Logger::LogType::INFO);
-    BPlusTree *bPlusTree=new BPlusTree(7);
+    BPlusTree *bPlusTree=new BPlusTree(BPLUSTREE_ORDER);
 	vector<thread> thread_array;
 
     //测试并发
 	thread_array.push_back(thread(&Test::bPlusTreeInsertTest,this,bPlusTree,0,500000));
     thread_array.push_back(thread(&Test::bPlusTreeInsertTestByRand,this,bPlusTree,300000));
-    thread_array.push_back(thread(&Test::bPlusTreeDeleteTest,this,bPlusTree,200000,8000000));
+    thread_array.push_back(thread(&Test::bPlusTreeDeleteTest,this,bPlusTree,200000,300000));
     thread_array.push_back(thread(&Test::bPlusTreeDeleteTestByRand,this,bPlusTree,500000));
     thread_array.push_back(thread(&Test::bPlusTreeSearchTest,this,bPlusTree,0,100000));
     thread_array.push_back(thread(&Test::bPlusTreeSearchTestByRand,this,bPlusTree,300000));
@@ -124,10 +124,12 @@ void Test::testBPlusTree()
 }
 
 //整体测试
+
+
 void Test::testAll()
 {
     TableManager& tableManager = TableManager::getTableManagerInstance();
-	int N=1;
+	int N=2;
 	vector<thread> thread_array;
 
 	//直接搜索
@@ -144,12 +146,12 @@ void Test::testAll()
 		cout<<endl;
 	}
 	
-	//并发创建索引
+	//并发测试基本功能
 	for(int i=0;i<N;i++)
 	{
 		Record r;
 		thread_array.push_back(thread(&TableManager::createIndex,ref(tableManager),i));
-		//thread_array.push_back(thread(&TableManager::append,ref(tableManager),ref(r)));
+		thread_array.push_back(thread(&TableManager::append,ref(tableManager),ref(r)));
 	}
 	for(auto ite=thread_array.begin();ite!=thread_array.end();ite++)
 	{

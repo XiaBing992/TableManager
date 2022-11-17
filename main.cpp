@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
 	{
 		cout<<"params error."<<endl;
 		cout<<"params: A ->B+树并发测试; "<<endl;
-		cout<<"params: B ->数据存储测试; "<<endl;
+		cout<<"params: B ->整体测试; "<<endl;
 		return 0;
 	}
 	Test test=Test();
@@ -26,7 +26,5 @@ int main(int argc, char *argv[])
 		test.testAll();
 	}
 	
-	
-	//test.testAll();
 
 }

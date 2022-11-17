@@ -67,12 +67,10 @@ bool BPlusTree::update(int64_t key, int value)
 bool BPlusTree::serialization(string file_name)
 {
     logger.writeLog("BPlusTree serialization...", Logger::LogType::INFO);
-    // cout << "serialization..." << endl;
     fstream data(file_name, ios::in | ios::out | ios::trunc);
     if (!data)
     {
         logger.writeLog("open file error.", Logger::LogType::ERROR);
-        // cout << "open file error." << endl;
         return false;
     }
 
@@ -127,7 +125,6 @@ bool BPlusTree::serialization(string file_name)
     data.close();
 
     logger.writeLog("serialization end.", Logger::LogType::INFO);
-    // cout << "serialization end..." << endl;
     return true;
 }
 BPlusTree *BPlusTree::deSerialization(string file_name)
@@ -136,11 +133,9 @@ BPlusTree *BPlusTree::deSerialization(string file_name)
     if (!data)
     {
         Logger::getInstance().writeLog("open error.", Logger::LogType::ERROR);
-        // cout << "open error." << endl;
         return NULL;
     }
     Logger::getInstance().writeLog("BPlusTree deSerialization...", Logger::LogType::INFO);
-    // cout << "deSerialization..." << endl;
     int n;
     string str_info;
     int key_count;
@@ -254,7 +249,6 @@ BPlusTree *BPlusTree::deSerialization(string file_name)
     }
     data.close();
     Logger::getInstance().writeLog("BPlusTree deSerialization end.", Logger::LogType::INFO);
-    // cout << "deSerialization end..." << endl;
 
     return b_plus_tree;
 }
@@ -280,15 +274,15 @@ bool BPlusTree::insert(const int64_t key, const int value)
         return true;
     }
     //存储上锁了的结点
-    stack<unique_lock<shared_mutex>> *st_lock_node_ = new stack<unique_lock<shared_mutex>>();
+    stack<unique_lock<shared_mutex>> *st_locked_node = new stack<unique_lock<shared_mutex>>();
     //查看key是否已经存在
-    LeafNode *first_leaf_node = searchInsertLeafNode(key, proot_guard, st_lock_node_);
+    LeafNode *first_leaf_node = searchInsertLeafNode(key, proot_guard, st_locked_node);
 
     for (int i = 0; i < first_leaf_node->getKeyNum(); i++)
     {
         if (first_leaf_node->getKey(i) == key)
         {
-            unLockStack(st_lock_node_, proot_guard);
+            unLockStack(st_locked_node, proot_guard);
             return false;
         }
     }
@@ -299,7 +293,7 @@ bool BPlusTree::insert(const int64_t key, const int value)
     if (first_leaf_node->getKeyNum() < this->getMaxKeyNum())
     {
         first_leaf_node->insert(key, value);
-        unLockStack(st_lock_node_, proot_guard);
+        unLockStack(st_locked_node, proot_guard);
         return true;
     }
 
@@ -338,43 +332,43 @@ bool BPlusTree::insert(const int64_t key, const int value)
 
         m_pRoot = new_root;
 
-        unLockStack(st_lock_node_, proot_guard);
+        unLockStack(st_locked_node, proot_guard);
         return true;
     }
 
-    st_lock_node_->pop();
+    st_locked_node->pop();
     // 1.叶子结点已满,父结点未满;2.叶子结点与父结点都满了，从下到上分裂
-    insertInternalNode(parent, new_key, brother, st_lock_node_, proot_guard);
-    unLockStack(st_lock_node_, proot_guard);
-    delete st_lock_node_;
+    insertInternalNode(parent, new_key, brother, st_locked_node, proot_guard);
+    unLockStack(st_locked_node, proot_guard);
+    delete st_locked_node;
     return true;
 }
 
-bool BPlusTree::insertInternalNode(BaseNode *parent, int64_t key, BaseNode *right_node, stack<unique_lock<shared_mutex>> *st_lock_node_, unique_lock<shared_mutex> &proot_guard)
+bool BPlusTree::insertInternalNode(BaseNode *p_node, int64_t key, BaseNode *right_node, stack<unique_lock<shared_mutex>> *st_locked_node, unique_lock<shared_mutex> &proot_guard)
 {
-    if (parent == NULL)
+    if (p_node == NULL)
     {
-        unLockStack(st_lock_node_, proot_guard);
+        unLockStack(st_locked_node, proot_guard);
         return false;
     }
 
     //父结点未满，直接插入
-    if (parent->getKeyNum() < MAX_KEY_NUM_)
+    if (p_node->getKeyNum() < MAX_KEY_NUM_)
     {
-        return ((InternalNode *)parent)->insert(key, right_node);
+        return ((InternalNode *)p_node)->insert(key, right_node);
     }
 
     //父结点已满，分配新结点
     InternalNode *parent_right_node = new InternalNode(m_nN);
     //当前父结点分裂
-    int64_t new_key = ((InternalNode *)parent)->split(parent_right_node, key);
+    int64_t new_key = ((InternalNode *)p_node)->split(parent_right_node, key);
 
     // key值插入
-    if (parent->getKeyNum() < parent_right_node->getKeyNum())
+    if (p_node->getKeyNum() < parent_right_node->getKeyNum())
     {
-        ((InternalNode *)parent)->insert(key, right_node);
+        ((InternalNode *)p_node)->insert(key, right_node);
     }
-    else if (parent->getKeyNum() > parent_right_node->getKeyNum())
+    else if (p_node->getKeyNum() > parent_right_node->getKeyNum())
     {
         ((InternalNode *)parent_right_node)->insert(key, right_node);
     }
@@ -384,26 +378,26 @@ bool BPlusTree::insertInternalNode(BaseNode *parent, int64_t key, BaseNode *righ
         parent_right_node->setChild(0, right_node);
         right_node->setParent(parent_right_node);
     }
-    BaseNode *grand_parent = parent->getParent();
+    BaseNode *parent = p_node->getParent();
     // BaseNode<keyType,valueType> *grand_parent=parent->getParent();
     //父结点是空
-    if (grand_parent == NULL)
+    if (parent == NULL)
     {
-        grand_parent = new InternalNode(m_nN);
-        ((InternalNode *)grand_parent)->setChild(0, parent);
-        ((InternalNode *)grand_parent)->setKeyNum(1);
-        ((InternalNode *)grand_parent)->setKey(0, new_key);
-        ((InternalNode *)grand_parent)->setChild(1, parent_right_node);
+        parent = new InternalNode(m_nN);
+        ((InternalNode *)parent)->setChild(0, p_node);
+        ((InternalNode *)parent)->setKeyNum(1);
+        ((InternalNode *)parent)->setKey(0, new_key);
+        ((InternalNode *)parent)->setChild(1, parent_right_node);
 
-        ((InternalNode *)parent)->setParent(grand_parent);
-        parent_right_node->setParent(grand_parent);
+        ((InternalNode *)p_node)->setParent(parent);
+        parent_right_node->setParent(parent);
 
-        m_pRoot = grand_parent;
-        unLockStack(st_lock_node_, proot_guard);
+        m_pRoot = parent;
+        unLockStack(st_locked_node, proot_guard);
         return true;
     }
-    st_lock_node_->pop();
-    return insertInternalNode(grand_parent, new_key, parent_right_node, st_lock_node_, proot_guard);
+    st_locked_node->pop();
+    return insertInternalNode(parent, new_key, parent_right_node, st_locked_node, proot_guard);
 }
 //键值删除
 bool BPlusTree::deleteData(int64_t key)
@@ -417,10 +411,6 @@ bool BPlusTree::deleteData(int64_t key)
     stack<unique_lock<shared_mutex>> *st_lock_node_ = new stack<unique_lock<shared_mutex>>();
     LeafNode *p = searchDeleteLeafNode(key, proot_guard, st_lock_node_);
 
-    // if(p==NULL)
-    // {
-    //     return false;
-    // }
 
     //从叶子结点删除数据
     bool temp = p->deleteKey(key);
@@ -569,7 +559,7 @@ bool BPlusTree::deleteData(int64_t key)
     return true;
 }
 //中间结点删除key值 注意：只有在左右结点变了方向时才需要去改父结点的key值(1.从兄弟结点借 2.删除结点)
-bool BPlusTree::deleteInternalNode(BaseNode *p_node, int delete_index, stack<unique_lock<shared_mutex>> *st_lock_node_, unique_lock<shared_mutex> &proot_guard)
+bool BPlusTree::deleteInternalNode(BaseNode *p_node, int delete_index, stack<unique_lock<shared_mutex>> *st_locked_node, unique_lock<shared_mutex> &proot_guard)
 {
     bool temp = ((InternalNode *)p_node)->deleteKey(p_node->getKey(delete_index));
     if (!temp)
@@ -584,18 +574,17 @@ bool BPlusTree::deleteInternalNode(BaseNode *p_node, int delete_index, stack<uni
             m_pRoot = ((InternalNode *)p_node)->getChild(0);
             m_pRoot->setParent(NULL);
 
-            unLockStack(st_lock_node_, proot_guard);
-            // cout<<"~"<<p_node<<endl;
+            unLockStack(st_locked_node, proot_guard);
             delete p_node;
             return true;
         }
-        unLockStack(st_lock_node_, proot_guard);
+        unLockStack(st_locked_node, proot_guard);
         return true;
     }
     //删除key后数量依然大于MIN_KEY_NUM_
     if (p_node->getKeyNum() >= MIN_KEY_NUM_)
     {
-        unLockStack(st_lock_node_, proot_guard);
+        unLockStack(st_locked_node, proot_guard);
         return true;
     }
     //寻找兄弟结点
@@ -605,7 +594,7 @@ bool BPlusTree::deleteInternalNode(BaseNode *p_node, int delete_index, stack<uni
     {
         brother_lock = unique_lock<shared_mutex>(p_node->getBrother(d)->getSharedMutex(), try_to_lock);
     }
-    st_lock_node_->push(move(brother_lock));
+    st_locked_node->push(move(brother_lock));
 
     BaseNode *brother = p_node->getBrother(d);
     //兄弟结点够借
@@ -640,7 +629,7 @@ bool BPlusTree::deleteInternalNode(BaseNode *p_node, int delete_index, stack<uni
                 }
             }
         }
-        unLockStack(st_lock_node_, proot_guard);
+        unLockStack(st_locked_node, proot_guard);
         return true;
     }
 
@@ -649,36 +638,32 @@ bool BPlusTree::deleteInternalNode(BaseNode *p_node, int delete_index, stack<uni
     {
         ((InternalNode *)brother)->mergeNode(p_node);
 
-        // new_key = ((InternalNode *)p_node)->getFirstLeafKey();
         delete_index = ((InternalNode *)parent)->getChildIndex(brother);
 
-        st_lock_node_->pop();
-        st_lock_node_->pop();
-        // cout<<"~"<<p_node<<endl;
+        st_locked_node->pop();
+        st_locked_node->pop();
         delete p_node;
     }
     else
     {
         ((InternalNode *)p_node)->mergeNode(brother);
 
-        // new_key = ((InternalNode *)brother)->getFirstLeafKey();
         delete_index = ((InternalNode *)parent)->getChildIndex(p_node);
-        // cout<<"~~"<<brother<<endl;
 
         brother->setKeyNum(0);
-        st_lock_node_->pop();
-        st_lock_node_->pop();
+        st_locked_node->pop();
+        st_locked_node->pop();
         delete brother;
     }
     //继续修改父结点的key值
-    return deleteInternalNode(parent, delete_index, st_lock_node_, proot_guard);
+    return deleteInternalNode(parent, delete_index, st_locked_node, proot_guard);
 }
 
 //查找小于key值的第一个叶子结点
-LeafNode *BPlusTree::searchInsertLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_lock_node_)
+LeafNode *BPlusTree::searchInsertLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_locked_node)
 {
     BaseNode *p = m_pRoot;
-    st_lock_node_->push(unique_lock<shared_mutex>(p->getSharedMutex()));
+    st_locked_node->push(unique_lock<shared_mutex>(p->getSharedMutex()));
 
     while (p != NULL)
     {
@@ -700,22 +685,22 @@ LeafNode *BPlusTree::searchInsertLeafNode(int64_t key, unique_lock<shared_mutex>
         if (p->getKeyNum() < this->getMaxKeyNum() && p != m_pRoot)
         {
             //转移当前结点控制权
-            unique_lock<shared_mutex> transfor_lock(move(st_lock_node_->top()));
-            unLockStack(st_lock_node_, proot_guard);
+            unique_lock<shared_mutex> transfor_lock(move(st_locked_node->top()));
+            unLockStack(st_locked_node, proot_guard);
             //转移回去
-            st_lock_node_->push(move(transfor_lock));
+            st_locked_node->push(move(transfor_lock));
         }
 
-        st_lock_node_->push(unique_lock<shared_mutex>(((InternalNode *)p)->getChild(i)->getSharedMutex()));
+        st_locked_node->push(unique_lock<shared_mutex>(((InternalNode *)p)->getChild(i)->getSharedMutex()));
         p = ((InternalNode *)p)->getChild(i);
     }
     return (LeafNode *)p;
 }
-LeafNode *BPlusTree::searchDeleteLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_lock_node_)
+LeafNode *BPlusTree::searchDeleteLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_locked_node)
 {
     BaseNode *p = m_pRoot;
 
-    st_lock_node_->push(unique_lock<shared_mutex>(p->getSharedMutex()));
+    st_locked_node->push(unique_lock<shared_mutex>(p->getSharedMutex()));
 
     while (p != NULL)
     {
@@ -737,12 +722,12 @@ LeafNode *BPlusTree::searchDeleteLeafNode(int64_t key, unique_lock<shared_mutex>
         if (p->getKeyNum() > this->getMinKeyNum() && p != m_pRoot)
         {
             //转移当前结点控制权
-            unique_lock<shared_mutex> transfor_lock(move(st_lock_node_->top()));
-            unLockStack(st_lock_node_, proot_guard);
+            unique_lock<shared_mutex> transfor_lock(move(st_locked_node->top()));
+            unLockStack(st_locked_node, proot_guard);
             //转移回去
-            st_lock_node_->push(move(transfor_lock));
+            st_locked_node->push(move(transfor_lock));
         }
-        st_lock_node_->push(unique_lock<shared_mutex>(((InternalNode *)p)->getChild(i)->getSharedMutex()));
+        st_locked_node->push(unique_lock<shared_mutex>(((InternalNode *)p)->getChild(i)->getSharedMutex()));
         p = ((InternalNode *)p)->getChild(i);
     }
     return (LeafNode *)p;
@@ -761,14 +746,9 @@ int BPlusTree::search(int64_t key)
     BaseNode *p = m_pRoot;
     queue<shared_lock<shared_mutex>> qu_locked_node;
     qu_locked_node.push(shared_lock<shared_mutex>(p->getSharedMutex()));
-    int h = 0;
+
     while (p != NULL)
     {
-        h++;
-        // if(p->getKeyNum()==0)
-        // {
-        //     return SEARCH_ERROR;
-        // }
         //找到叶子结点结束
         if (p->getNodeType() == LEAF_NODE)
         {
@@ -796,10 +776,6 @@ int BPlusTree::search(int64_t key)
         p = ((InternalNode *)p)->getChild(i);
     }
 
-    // if(p->getKeyNum()==0||p==NULL)
-    // {
-    //     return SEARCH_ERROR;
-    // }
     for (int i = 0; i < p->getKeyNum(); i++)
     {
         if (((LeafNode *)p)->getKey(i) == key)
@@ -861,7 +837,7 @@ bool BPlusTree::checkInternalNode(BaseNode *now_node)
     return true;
 }
 
-/*------------------------------------------私有成员函数------------------------------------------*/
+
 //检查一个结点中的属性是否满足B+树
 bool BPlusTree::checkOneNode(BaseNode *p_node)
 {
@@ -885,11 +861,11 @@ bool BPlusTree::checkOneNode(BaseNode *p_node)
     return true;
 }
 
-void BPlusTree::unLockStack(stack<unique_lock<shared_mutex>> *st_lock_node_, unique_lock<shared_mutex> &proot_guard)
+void BPlusTree::unLockStack(stack<unique_lock<shared_mutex>> *st_locked_node, unique_lock<shared_mutex> &proot_guard)
 {
-    while (!st_lock_node_->empty())
+    while (!st_locked_node->empty())
     {
-        st_lock_node_->pop();
+        st_locked_node->pop();
     }
     if (proot_guard.owns_lock())
     {
@@ -968,4 +944,6 @@ vector<int> BPlusTree::searchRange(const int low, const int high, promise<vector
         }
         p = ((LeafNode *)p)->getRightNode();
     }
+
+    return res;
 }

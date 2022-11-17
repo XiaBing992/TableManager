@@ -39,16 +39,16 @@ private:
     Logger& logger=Logger::getInstance();
 
     //将栈中结点全部解锁
-    void unLockStack(stack<unique_lock<shared_mutex>> *st_lock_node_, unique_lock<shared_mutex> &proot_guard);
+    void unLockStack(stack<unique_lock<shared_mutex>> *st_locked_node, unique_lock<shared_mutex> &proot_guard);
 
     //查找小于key值的第一个叶子结点
-    LeafNode *searchInsertLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_lock_node_);
-    LeafNode *searchDeleteLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_lock_node_);
+    LeafNode *searchInsertLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_locked_node);
+    LeafNode *searchDeleteLeafNode(int64_t key, unique_lock<shared_mutex> &proot_guard, stack<unique_lock<shared_mutex>> *st_locked_node);
 
     //中间结点插入key值
-    bool insertInternalNode(BaseNode *parent, int64_t key, BaseNode *right_node, stack<unique_lock<shared_mutex>> *st_lock_node_, unique_lock<shared_mutex> &proot_guard);
+    bool insertInternalNode(BaseNode *p_node, int64_t key, BaseNode *right_node, stack<unique_lock<shared_mutex>> *st_locked_node, unique_lock<shared_mutex> &proot_guard);
     //中间结点删除key值
-    bool deleteInternalNode(BaseNode *p_node, int delete_index, stack<unique_lock<shared_mutex>> *st_lock_node_, unique_lock<shared_mutex> &proot_guard);
+    bool deleteInternalNode(BaseNode *p_node, int delete_index, stack<unique_lock<shared_mutex>> *st_locked_node, unique_lock<shared_mutex> &proot_guard);
     //检查内部结点是否满足定义
     bool checkInternalNode(BaseNode *now_node);
     //检查一个结点中的属性是否满足B+树
@@ -87,15 +87,6 @@ public:
             qu.pop();
             delete p;
         }
-        // if (m_pRoot != m_pDataHead)
-        // {
-        //     delete m_pRoot;
-        //     delete m_pDataHead;
-        // }
-        // else
-        // {
-        //     delete m_pRoot;
-        // }
     }
 
     BaseNode *getProot()
@@ -122,11 +113,11 @@ public:
     {
         return MAX_CHILD_NUM;
     }
-    bool setProot(BaseNode *p_node)
+    void setProot(BaseNode *p_node)
     {
         m_pRoot = p_node;
     }
-    bool setPDataHead(LeafNode *p_node)
+    void setPDataHead(LeafNode *p_node)
     {
         m_pDataHead=p_node;
     }
@@ -141,7 +132,6 @@ public:
     int search(int64_t key);
     //查找范围内的数据
     vector<int> searchRange(const int low,const int high,promise<vector<int>> *promise_ret);
-    // valueType searchData(keyType key);
 
     //检查是否满足B+树的定义
     bool checkTree();

@@ -35,6 +35,7 @@ BaseNode* BaseNode::getBrother(Direction &d)
             return ((InternalNode*)parent)->getChild(i+1);
         }
     }
+    return  NULL;
 }
 /*----------------------InternalNode函数定义-----------------------*/
 //结点合并
@@ -48,8 +49,7 @@ bool InternalNode::mergeNode(BaseNode* node)
 
     //取待合并结点的第一个孩子首值作为新的key值
     int count=this->getKeyNum();
-    //修改--------------------这里有问题。。。。。。。。。。。
-    //int64_t new_key=((InternalNode*)node)->getChild(0)->getKey(0);
+
     int64_t new_key=((InternalNode*)node)->getFirstLeafKey();
     this->setKey(count,new_key);
     this->setChild(count+1,((InternalNode*)node)->getChild(0));
@@ -111,6 +111,8 @@ int InternalNode::getChildIndex(BaseNode* child)
             return i;
         }
     }
+
+    return -1;
 }
 //删除key值及其后面的指针
 bool InternalNode::deleteKey(int64_t key)
@@ -139,7 +141,7 @@ bool InternalNode::deleteKey(int64_t key)
     {
         this->setChild(index,this->getChild(index+1));
     }
-    //this->setChild(index,NULL);
+
     this->m_nKeyNum--;
 
     return true;
@@ -159,7 +161,7 @@ bool InternalNode::moveOneKey(BaseNode* p_node)
         
         //找到最小的key值
         int64_t new_key=this->getFirstLeafKey();
-        //cout<<this->getKeyNum()<<endl;
+
         //留出空位
         for(int i=this->getKeyNum();i>=1;i--)
         {
@@ -272,7 +274,6 @@ void LeafNode::insert(int64_t key, int value)
 
     this->m_pKeys[i] = key;
     pvalues_[i] = value;
-    //cout<<"pvalues:"<<value<<endl;
 
     this->m_nKeyNum++;
 }

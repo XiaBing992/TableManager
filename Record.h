@@ -16,22 +16,19 @@ class Record
 {
     
     public:
-    //主键下标
-    //int m_nKeyIndex;
     //属性
     int64_t m_gAttributes[ATTRIBUTE_NUM];
 
     Record();
     Record(Record& record)
     {
-        //this->m_nKeyIndex=record.m_nKeyIndex;
         copy(begin(record.m_gAttributes),end(record.m_gAttributes),begin(this->m_gAttributes));
-        //this->m_smMutex=shared_mutex(move(record.m_smMutex));
     }
     Record operator=(const Record& record)
     {
-        //this->m_nKeyIndex=record.m_nKeyIndex;
         copy(begin(record.m_gAttributes),end(record.m_gAttributes),begin(this->m_gAttributes));
+
+        return *this;
     }
     Record(Record&& record)
     {
