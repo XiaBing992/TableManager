@@ -1,0 +1,18 @@
+{
+    "files.associations": {
+        "iostream": "cpp",
+        "ostream": "cpp",
+        "*.tcc": "cpp",
+        "fstream": "cpp",
+        "iosfwd": "cpp",
+        "shared_mutex": "cpp",
+        "new": "cpp",
+        "istream": "cpp",
+        "deque": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp",
+        "future": "cpp",
+        "typeinfo": "cpp",
+        "sstream": "cpp"
+    }
+}
