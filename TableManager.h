@@ -20,7 +20,7 @@
 
 
 //系统默认支持阶数为奇数
-#define BPLUSTREE_ORDER 9
+#define BPLUSTREE_ORDER 19
 
 
 //表管理类
@@ -34,8 +34,6 @@ private:
     int m_nRecordNum;
     //属性数
     int m_nAttributeNum;
-    //缓存个数
-    //int m_nBufferCount=0;
 
 
     //缓冲区
@@ -77,11 +75,9 @@ public:
     ~TableManager()
     {
         //将更新的数据写入
-        //writeUpdate();
         flushInsertBuffer();
         serializeBPlusTree();
-        //writeAll();
-        //fclose(FD_);
+ 
         m_gFd[0].close();
         m_gFd[1].close();
     }

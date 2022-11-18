@@ -123,11 +123,30 @@ void Test::testBPlusTree()
     logger.writeLog("testBPlusTree end.",Logger::LogType::INFO);
 }
 
+
+
+
+//多线程添加
+void Test::apendTest(int n)
+{
+	TableManager& tableManager = TableManager::getTableManagerInstance();
+	vector<thread> thread_array;
+	//数据添加
+	for(int i=0;i<n;i++)
+	{
+		Record r;
+		thread_array.push_back(thread(&TableManager::append,ref(tableManager),ref(r)));
+	}
+	for(auto ite=thread_array.begin();ite!=thread_array.end();ite++)
+	{
+		ite->join();
+	}
+}
+
 //整体测试
-
-
 void Test::testAll()
 {
+	int best_thread_num=thread::hardware_concurrency();
     TableManager& tableManager = TableManager::getTableManagerInstance();
 	int N=2;
 	vector<thread> thread_array;
@@ -145,13 +164,15 @@ void Test::testAll()
 		}
 		cout<<endl;
 	}
-	
-	//并发测试基本功能
+
+	//添加多线程测试
+	apendTest(best_thread_num);
+
+	//创建索引测试
 	for(int i=0;i<N;i++)
 	{
 		Record r;
 		thread_array.push_back(thread(&TableManager::createIndex,ref(tableManager),i));
-		thread_array.push_back(thread(&TableManager::append,ref(tableManager),ref(r)));
 	}
 	for(auto ite=thread_array.begin();ite!=thread_array.end();ite++)
 	{

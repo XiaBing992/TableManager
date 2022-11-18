@@ -41,12 +41,13 @@ TableManager::TableManager()
         logger.writeLog("deSerialize...",Logger::LogType::INFO);
         //反序列化索引B+树
         deSerializeBPlusTree();
-        // cout << "read." << endl;
-        //从文件读取配置数据
-        m_gFd[0].read(reinterpret_cast<char *>(&m_nRecordNum), sizeof(int));
+
+        //获取记录数
+        m_gFd[1].seekg(0,m_gFd[1].end);
+        m_nRecordNum=m_gFd[1].tellg()/sizeof(Record);
+
         m_nAttributeNum = ATTRIBUTE_NUM;
         m_gFd[1].seekg(0, m_gFd[1].beg);
-
         //记录数比缓冲区小
         if (m_nRecordNum <= MAX_RECORD_BUFFER_SIZE)
         {
@@ -187,10 +188,13 @@ void TableManager::initTableByRand()
 void TableManager::append(Record r)
 {
     logger.writeLog("append record...",Logger::LogType::INFO);
+    unique_lock<shared_mutex> reocrd_num_lock(m_smRecordNumMutex);
     unique_lock<shared_mutex> buffer_lock(m_cBuffer.m_smInsertTableMutex);
     m_cBuffer.m_pInsertBuffer[m_cBuffer.m_nInsertBufferSize++] = r;
-    buffer_lock.unlock();
     m_nRecordNum++;
+
+    buffer_lock.unlock();
+    reocrd_num_lock.unlock();
 
     //处理建立了索引的列
     if (m_umIndexedCol.size() != 0)
@@ -221,6 +225,9 @@ void TableManager::createIndex(const int col)
         logger.writeLog("the index of " + to_string(col) + " is already exits.", Logger::LogType::ERROR);
         return;
     }
+    //刷新缓冲区
+    flushInsertBuffer();
+    unique_lock<shared_mutex> record_num_lock(m_smRecordNumMutex);
     unique_lock<shared_mutex> buffer_lock(m_cBuffer.m_smTableMutex);
     //新建立索引
     BPlusTree *bPlusTree = new BPlusTree(BPLUSTREE_ORDER);
@@ -239,12 +246,11 @@ void TableManager::createIndex(const int col)
         m_gFd[1].seekg(0, m_gFd[1].beg);
         int record_start_pos = 0;
         int record_end_pos = 0;
-        // m_cBuffer.m_nTableBufferSize = MAX_RECORD_BUFFER_SIZE;
         while (record_end_pos + MAX_RECORD_BUFFER_SIZE < m_nRecordNum)
         {
             if(!m_gFd[1].read((char *)m_cBuffer.m_pTableBuffer, sizeof(Record) * MAX_RECORD_BUFFER_SIZE))
             {
-                //cout<<"ttt"<<endl;
+                logger.writeLog("read error.",Logger::LogType::ERROR);
                 exit(-1);
             }
             
@@ -344,6 +350,7 @@ map<int, Record> TableManager::searchDirect(const int col, const int low, const 
     //刷新缓冲区
     flushInsertBuffer();
 
+    unique_lock<shared_mutex> record_num_lock(m_smRecordNumMutex);
     unique_lock<shared_mutex> buffer_lock(m_cBuffer.m_smTableMutex);
     map<int, Record> res;
     //文件数据已经被全部读进来
@@ -371,6 +378,7 @@ map<int, Record> TableManager::searchDirect(const int col, const int low, const 
         if(!m_gFd[1].read((char *)m_cBuffer.m_pTableBuffer, sizeof(Record) * MAX_RECORD_BUFFER_SIZE))
         {
             logger.writeLog("read error.",Logger::LogType::ERROR);
+            exit(-1);
         }
         record_start_pos = record_end_pos;
         record_end_pos += MAX_RECORD_BUFFER_SIZE;
@@ -383,7 +391,6 @@ map<int, Record> TableManager::searchDirect(const int col, const int low, const 
             if (value >= low && value <= high)
             {
                 // i+record_start_pos为记录真实行数
-                //logger.writeLog(to_string(i+record_start_pos),Logger::LogType::DEBUG);
                 res[i + record_start_pos] = m_cBuffer.m_pTableBuffer[i];
             }
         }
@@ -419,12 +426,15 @@ void TableManager::flushInsertBuffer()
 {
     unique_lock<shared_mutex> buffer_lock(m_cBuffer.m_smInsertTableMutex);
     //写配置文件
-    m_gFd[0].seekg(0, m_gFd[0].end);
+    m_gFd[0].seekg(0, m_gFd[0].beg);
     m_gFd[0].write((char *)&m_nRecordNum, sizeof(int));
 
     //写数据
     m_gFd[1].seekg(0, m_gFd[1].end);
-    m_gFd[1].write((char *)m_cBuffer.m_pInsertBuffer, sizeof(Record) * m_cBuffer.m_nInsertBufferSize);
+    if(!m_gFd[1].write((char *)m_cBuffer.m_pInsertBuffer, sizeof(Record) * m_cBuffer.m_nInsertBufferSize))
+    {
+        cout<<"sss"<<endl;
+    }
 
     m_cBuffer.m_nInsertBufferSize=0;
 }
@@ -501,6 +511,7 @@ void TableManager::deleteIndex(const int col)
 //根据记录下标得到记录
 Record TableManager::getRecordByIndex(int index)
 {
+    unique_lock<shared_mutex> record_num_lock(m_smRecordNumMutex);
     if(index>=m_cBuffer.m_nRecordStartPos&&index<m_cBuffer.m_nRecordStartPos+m_cBuffer.m_nTableBufferSize)
     {
         return m_cBuffer.m_pTableBuffer[index-m_cBuffer.m_nRecordStartPos];

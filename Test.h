@@ -21,6 +21,9 @@ class Test
     void bPlusTreeUpdateTest(BPlusTree* bPlusTree,int start,int end);
     void bPlusTreeUpdateTestByRand(BPlusTree* bPlusTree,int n);
 
+    //多线程添加
+    void apendTest(int n);
+
     public:
     //单元测试B+树
     void testBPlusTree();
